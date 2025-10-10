@@ -76,9 +76,15 @@ h1{
 }
 .samii-logo{
   display:block;
-  margin:30px auto 10px;
-  width:180px;
-  max-width:70vw;
+  margin:40px auto 20px;
+  width:360px; /* doubled from 180px */
+  max-width:90vw;
+  transition:transform 0.6s ease-in-out, opacity 1s ease-in-out;
+  opacity:0;
+}
+.samii-logo.show{
+  transform:scale(1.1);
+  opacity:1;
 }
 .bar{
   width:min(860px,92vw);
@@ -98,8 +104,6 @@ h1{
 .stats{color:var(--silver);font-size:20px;line-height:1.8}
 .highlight{color:var(--mint);font-weight:700}
 footer{margin:30px 0 10px;color:var(--silver);font-size:14px}
-
-/* Celebration overlay */
 #celebrate{
   position:fixed;
   inset:0;
@@ -145,17 +149,18 @@ footer{margin:30px 0 10px;color:var(--silver);font-size:14px}
   border-radius:12px;
   box-shadow:0 6px 24px rgba(0,0,0,.35);
 }
-
-@keyframes flash{
-  0%{opacity:1;transform:scale(1)}
-  50%{opacity:.5;transform:scale(1.05)}
-  100%{opacity:1;transform:scale(1)}
-}
+@keyframes flash{0%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.05)}100%{opacity:1;transform:scale(1)}}
 @keyframes fadein{from{opacity:0}to{opacity:1}}
 </style>
 </head>
 <body>
 <img class="samii-logo" src="https://cdn.prod.website-files.com/6642ff26ca1cac64614e0e96/6642ff6de91fa06b733c39c6_SAMii-p-500.png" alt="SAMii logo">
+<script>
+  window.addEventListener('load', ()=>{
+    document.querySelector('.samii-logo')?.classList.add('show');
+  });
+</script>
+
 <h1>${escapeHtml(o.title)}</h1>
 <div class="bar"><div class="fill"></div></div>
 <div class="stats">
@@ -176,108 +181,89 @@ footer{margin:30px 0 10px;color:var(--silver);font-size:14px}
 
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
 <script>
-  // ---- confetti + gating (first two views per visitor) ----
-  const params = new URLSearchParams(location.search);
-  const demo = params.get('demo');
-  const IS_HIT = ${IS_HIT};
-  const KEY = 'samii_milestone_seen_v1';
-  if (demo==='reset') localStorage.removeItem(KEY);
+const params = new URLSearchParams(location.search);
+const demo = params.get('demo');
+const IS_HIT = ${IS_HIT};
+const KEY = 'samii_milestone_seen_v1';
+if (demo==='reset') localStorage.removeItem(KEY);
 
-  function fireConfetti(){
-    const blast = () => confetti({particleCount:160,spread:120,startVelocity:45,origin:{y:0.6}});
-    blast(); setTimeout(blast,600); setTimeout(blast,1200);
-  }
+function fireConfetti(){
+  const blast = () => confetti({particleCount:160,spread:120,startVelocity:45,origin:{y:0.6}});
+  blast(); setTimeout(blast,600); setTimeout(blast,1200);
+}
 
-  // ---- audio: fanfare + applause (Web Audio, no external files) ----
-  let audioCtx;
-  function ensureAudioCtx(){
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') return audioCtx.resume();
-    return Promise.resolve();
-  }
+// ---- audio ----
+let audioCtx;
+function ensureAudioCtx(){
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') return audioCtx.resume();
+  return Promise.resolve();
+}
 
-  function playFanfare(){
-    if (!audioCtx) return;
-    const now = audioCtx.currentTime;
-    // simple triad fanfare (C–G–C)
-    const notes = [261.63, 392.00, 523.25];
-    notes.forEach((freq, i) => {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'triangle';
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.0001, now + i*0.05);
-      gain.gain.exponentialRampToValueAtTime(0.5, now + i*0.05 + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.7 + i*0.02);
-      osc.connect(gain).connect(audioCtx.destination);
-      osc.start(now + i*0.05);
-      osc.stop(now + 0.8 + i*0.02);
-    });
-  }
-
-  function playApplause(){
-    if (!audioCtx) return;
-    // white noise burst with gentle decay = crowd-ish
-    const dur = 1.6;
-    const rate = audioCtx.sampleRate;
-    const buffer = audioCtx.createBuffer(1, rate * dur, rate);
-    const data = buffer.getChannelData(0);
-    for (let i=0;i<data.length;i++){
-      // pink-ish noise
-      const t = i/data.length;
-      data[i] = (Math.random()*2-1) * (1 - t) * 0.7;
-    }
-    const src = audioCtx.createBufferSource();
+function playFanfare(){
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  const notes = [261.63, 392.00, 523.25];
+  notes.forEach((freq, i) => {
+    const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
-    gain.gain.value = 0.25;
-    src.buffer = buffer;
-    src.connect(gain).connect(audioCtx.destination);
-    src.start();
-  }
+    osc.type = 'triangle';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.0001, now + i*0.05);
+    gain.gain.exponentialRampToValueAtTime(0.5, now + i*0.05 + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.7 + i*0.02);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(now + i*0.05);
+    osc.stop(now + 0.8 + i*0.02);
+  });
+}
 
-  async function playCelebrationAudio(){
-    try {
-      await ensureAudioCtx();
-      playFanfare();
-      setTimeout(playApplause, 300);
-      return true;
-    } catch(e){
-      return false;
+function playApplause(){
+  if (!audioCtx) return;
+  const dur = 1.6;
+  const rate = audioCtx.sampleRate;
+  const buffer = audioCtx.createBuffer(1, rate * dur, rate);
+  const data = buffer.getChannelData(0);
+  for (let i=0;i<data.length;i++){
+    const t = i/data.length;
+    data[i] = (Math.random()*2-1)*(1-t)*0.7;
+  }
+  const src = audioCtx.createBufferSource();
+  const gain = audioCtx.createGain();
+  gain.gain.value = 0.25;
+  src.buffer = buffer;
+  src.connect(gain).connect(audioCtx.destination);
+  src.start();
+}
+
+async function playCelebrationAudio(){
+  try {
+    await ensureAudioCtx();
+    playFanfare();
+    setTimeout(playApplause, 300);
+    return true;
+  } catch(e){ return false; }
+}
+
+function showCelebrate(){
+  const el = document.getElementById('celebrate');
+  const btn = document.getElementById('soundBtn');
+  el.classList.add('show');
+  playCelebrationAudio().then(ok => { if (!ok) btn.classList.add('show'); });
+  btn.addEventListener('click', async ()=>{ const ok = await playCelebrationAudio(); if (ok) btn.classList.remove('show'); });
+  el.addEventListener('click', e => { if (e.target === el) el.classList.remove('show'); });
+}
+
+(function main(){
+  if (IS_HIT || demo==='hit'){
+    const seen = Number(localStorage.getItem(KEY)||0);
+    if (seen < 2){
+      showCelebrate();
+      fireConfetti();
+      localStorage.setItem(KEY,String(seen+1));
     }
   }
-
-  function showCelebrate(){
-    const el = document.getElementById('celebrate');
-    const btn = document.getElementById('soundBtn');
-    el.classList.add('show');
-
-    // try autoplay first
-    playCelebrationAudio().then(ok => {
-      if (!ok) btn.classList.add('show');
-    });
-
-    // fallback: user gesture
-    btn.addEventListener('click', async () => {
-      const ok = await playCelebrationAudio();
-      if (ok) btn.classList.remove('show');
-    });
-
-    // close on overlay click (keeps sound playing)
-    el.addEventListener('click', (e) => {
-      if (e.target === el) el.classList.remove('show');
-    });
-  }
-
-  (function main(){
-    if (IS_HIT || demo==='hit') {
-      const seen = Number(localStorage.getItem(KEY)||0);
-      if (seen < 2) {
-        showCelebrate();
-        fireConfetti();
-        localStorage.setItem(KEY,String(seen+1));
-      }
-    }
-  })();
+})();
 </script>
 </body>
 </html>`;

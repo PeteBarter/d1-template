@@ -20,7 +20,7 @@ export default {
             body {
               background: #0f1115;
               color: #f8f8f8;
-              font-family: 'Helvetica Neue', sans-serif;
+              font-family: 'Comfortaa', sans-serif;
               text-align: center;
               padding: 4rem 1rem;
             }
@@ -47,7 +47,7 @@ export default {
           </style>
         </head>
         <body>
-          <h1>🎉 SAMii Stripe Milestone Tracker 🎉</h1>
+          <h1>🎉 SAMii Lesson Payments Milestone Tracker 🎉</h1>
           <div class="bar"><div class="fill"></div></div>
           <div class="stats">
             <p><strong>Total so far:</strong> A$${gross.toLocaleString()}</p>

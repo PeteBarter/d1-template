@@ -1,91 +1,110 @@
-// 🎉 SAMii Lesson Payments Milestone Tracker (TypeScript Worker)
-// Endpoints:
-//   GET  /                 -> Public dashboard (confetti + GIFs on milestone)
-//   GET  /progress         -> JSON (gross, remaining, percent, milestone info)
-//   POST /init?value=NNN   -> Seed current total (AUD dollars)
-//   POST /stripe-webhook   -> Stripe events (charge.succeeded)
-//
-// Bindings required:
-//   KV (KVNamespace)          - stores totals + milestone flags
-//   STRIPE_WEBHOOK_SECRET     - Stripe signing secret (webhook verification)
-//   SLACK_WEBHOOK_URL (opt)   - Slack Incoming Webhook for alerts
-
-interface Env {
-  KV: KVNamespace;
-  STRIPE_WEBHOOK_SECRET?: string;
-  SLACK_WEBHOOK_URL?: string;
-}
-
-const TARGET = 1_000_000; // AUD
-
 export default {
-  // Uncomment if you later want cron summaries
-  // async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {},
-
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request, env) {
+    const TARGET = 1_000_000;
     const url = new URL(request.url);
-    const demo = url.searchParams.get("demo"); // 'hit' | 'reset' | null
+    const demo = url.searchParams.get("demo");
+    const KV = env.KV;
 
-    // ---------- JSON ----------
-    if (url.pathname === "/progress" && request.method === "GET") {
-      const gross = await getGross(env);
-      const { milestone_hit_at, milestone_version } = await getMilestone(env);
-      const remaining = Math.max(0, TARGET - gross);
-      const percent = Math.min(100, (gross / TARGET) * 100);
-
-      return json({
-        currency: "AUD",
-        gross_aud: round2(gross),
-        remaining_to_million_aud: round2(remaining),
-        percent: round2(percent),
-        milestone_hit: gross >= TARGET,
-        milestone_hit_at,
-        milestone_version
-      });
+    async function getGross() {
+      return Number((await KV.get("grossAud")) || "988100");
     }
 
-    // ---------- Seed (one-off / manual adjust) ----------
-    if (url.pathname === "/init" && request.method === "POST") {
-      const value = Number(url.searchParams.get("value") || "0");
-      await env.KV.put("grossAud", String(value));
-      // clear milestone + per-threshold alerts
-      await env.KV.delete("alert:10000");
-      await env.KV.delete("alert:5000");
-      await env.KV.delete("alert:1000");
-      await env.KV.delete("alert:hit");
-      await env.KV.delete("milestone_hit_at");
-      await env.KV.delete("milestone_version");
-      return text("initialised");
+    const gross = await getGross();
+    const remaining = Math.max(0, TARGET - gross);
+    const percent = Math.min(100, (gross / TARGET) * 100);
+    const isHit = gross >= TARGET || demo === "hit";
+
+    return new Response(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SAMii Lesson Payments Milestone Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --dark-teal: #0d3447;
+    --blue-teal: #0d6694;
+    --light-teal: #4791B8;
+    --mint: #3CC99F;
+  }
+  body {
+    margin:0;
+    font-family:'Comfortaa',sans-serif;
+    background:var(--dark-teal);
+    color:white;
+    text-align:center;
+  }
+  h1 {
+    margin:40px 0 20px;
+    font-size:2rem;
+    background:linear-gradient(90deg,var(--mint),var(--light-teal));
+    -webkit-background-clip:text;
+    color:transparent;
+  }
+  .bar {
+    width:90%;
+    max-width:800px;
+    height:30px;
+    margin:40px auto;
+    background:rgba(255,255,255,0.15);
+    border-radius:20px;
+    overflow:hidden;
+  }
+  .fill {
+    height:100%;
+    width:${percent.toFixed(2)}%;
+    background:linear-gradient(90deg,var(--blue-teal),var(--mint));
+    transition:width 0.5s;
+  }
+  .stats{font-size:20px;margin:20px;}
+  .highlight{color:var(--mint);}
+  #celebrate{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);align-items:center;justify-content:center;z-index:10;}
+  #celebrate.show{display:flex;}
+  .gifgrid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));max-width:800px;}
+  .gifgrid img{width:100%;border-radius:10px;}
+</style>
+</head>
+<body>
+  <h1>🎉 SAMii Lesson Payments Milestone Tracker 🎉</h1>
+  <div class="bar"><div class="fill"></div></div>
+  <div class="stats">
+    <div>Total so far: <span class="highlight">A$${gross.toLocaleString()}</span></div>
+    <div>Remaining to $1M: <span class="highlight">A$${remaining.toLocaleString()}</span></div>
+    <div>Progress: <span class="highlight">${percent.toFixed(2)}%</span></div>
+  </div>
+
+  <div id="celebrate">
+    <div class="gifgrid">
+      <img src="https://media.giphy.com/media/5GoVLqeAOo6PK/giphy.gif">
+      <img src="https://media.giphy.com/media/3o6Zt6ML6BklcajjsA/giphy.gif">
+      <img src="https://media.giphy.com/media/l0Exk8EUzSLsrErEQ/giphy.gif">
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+  <script>
+    const IS_HIT = ${isHit};
+    const params = new URLSearchParams(location.search);
+    const demo = params.get('demo');
+    const KEY = 'samii_milestone_seen_v1';
+    if (demo === 'reset') localStorage.removeItem(KEY);
+
+    if ((IS_HIT || demo === 'hit')) {
+      const seen = Number(localStorage.getItem(KEY) || 0);
+      if (seen < 2) {
+        const overlay = document.getElementById('celebrate');
+        overlay.classList.add('show');
+        overlay.addEventListener('click',()=>overlay.classList.remove('show'));
+        const fire = () => confetti({particleCount:120,spread:100,origin:{y:0.6}});
+        fire(); setTimeout(fire,600); setTimeout(fire,1200);
+        localStorage.setItem(KEY, seen+1);
+      }
     }
-
-    // ---------- Stripe webhook ----------
-    if (url.pathname === "/stripe-webhook" && request.method === "POST") {
-      const payload = await request.text();
-      const sigHeader = request.headers.get("stripe-signature") || "";
-      const ok = await verifyStripe(payload, sigHeader, env.STRIPE_WEBHOOK_SECRET || "");
-      if (!ok) return text("bad signature", 400);
-
-      const event = JSON.parse(payload);
-      if (event.type === "charge.succeeded") {
-        const obj = event.data?.object || {};
-        if (obj.currency === "aud") {
-          const inc = Number(obj.amount || 0) / 100; // dollars
-          const prev = await getGross(env);
-          const gross = prev + inc;
-          await env.KV.put("grossAud", String(gross));
-
-          // Alerts + milestone bookkeeping
-          const remaining = TARGET - gross;
-          if (gross >= TARGET && !(await env.KV.get("alert:hit"))) {
-            await env.KV.put("alert:hit", "1");
-            const hitAt = new Date().toISOString();
-            const version = `1M-${hitAt}`;
-            await env.KV.put("milestone_hit_at", hitAt);
-            await env.KV.put("milestone_version", version);
-            await postSlack(env.SLACK_WEBHOOK_URL, `🎉 SAMii just hit A$1,000,000 (now A$${gross.toFixed(2)})`);
-          } else {
-            if (remaining <= 10_000 && !(await env.KV.get("alert:10000"))) {
-              await env.KV.put("alert:10000", "1");
-              await postSlack(env.SLACK_WEBHOOK_URL, `⏳ Under 10k to go: A$${remaining.toFixed(2)}.`);
-            }
-            if (remaining <= 5_000 && !(await env.KV.get("alert:5000"))) {
+  </script>
+</body>
+</html>`, {
+      headers: { "content-type": "text/html" }
+    });
+  }
+};

@@ -19,7 +19,7 @@ export default {
       percentValue: percent,
       isHit,
     });
-    return new Response(html, { headers: { "content-type": "text/html" } });
+    return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
   }
 };
 
@@ -71,6 +71,7 @@ h1{
   font-size:clamp(24px,3vw,40px);
   background:linear-gradient(90deg,var(--mint),var(--light-teal));
   -webkit-background-clip:text;
+  background-clip:text;
   color:transparent;
 }
 .samii-logo{
@@ -97,15 +98,18 @@ h1{
 .stats{color:var(--silver);font-size:20px;line-height:1.8}
 .highlight{color:var(--mint);font-weight:700}
 footer{margin:30px 0 10px;color:var(--silver);font-size:14px}
+
+/* Celebration overlay */
 #celebrate{
   position:fixed;
   inset:0;
   display:none;
   align-items:center;
   justify-content:center;
-  background:rgba(0,0,0,.7);
+  background:rgba(0,0,0,.72);
   z-index:50;
   flex-direction:column;
+  padding:20px;
 }
 #celebrate.show{display:flex;animation:fadein .5s ease-out}
 .massive{
@@ -116,6 +120,18 @@ footer{margin:30px 0 10px;color:var(--silver);font-size:14px}
   animation:flash 1s infinite alternate;
   margin-bottom:20px;
 }
+.sound-btn{
+  margin:10px 0 0;
+  background:var(--mint);
+  color:#042016;
+  border:none;
+  padding:10px 16px;
+  border-radius:999px;
+  font-weight:700;
+  cursor:pointer;
+  display:none;
+}
+.sound-btn.show{display:inline-block}
 .gifgrid{
   display:flex;
   flex-wrap:wrap;
@@ -129,6 +145,7 @@ footer{margin:30px 0 10px;color:var(--silver);font-size:14px}
   border-radius:12px;
   box-shadow:0 6px 24px rgba(0,0,0,.35);
 }
+
 @keyframes flash{
   0%{opacity:1;transform:scale(1)}
   50%{opacity:.5;transform:scale(1.05)}
@@ -150,30 +167,117 @@ footer{margin:30px 0 10px;color:var(--silver);font-size:14px}
 
 <div id="celebrate" aria-hidden="true">
   <div class="massive">$1,000,000</div>
+  <button id="soundBtn" class="sound-btn" type="button">Tap for sound 🔊</button>
   <div class="gifgrid">
-    <img src="https://i0.wp.com/media2.giphy.com/media/91o6Q8CZlGljO/giphy.gif" alt="Confetti celebration">
+    <img src="https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExNjAwc3R1azZ6b280MzkybjF4ZHUzOGc1em85NjUyc3lkZjgxYzNiayZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/5GoVLqeAOo6PK/giphy.gif" alt="Confetti celebration">
     <img src="https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExZXowbGZzZGc0bWNtZTR3eDFlcnE5NW9ia3Z4c2lsaDZib20ydnlkYiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/hZj44bR9FVI3K/giphy.webp" alt="Fireworks">
   </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
 <script>
+  // ---- confetti + gating (first two views per visitor) ----
   const params = new URLSearchParams(location.search);
   const demo = params.get('demo');
   const IS_HIT = ${IS_HIT};
   const KEY = 'samii_milestone_seen_v1';
   if (demo==='reset') localStorage.removeItem(KEY);
-  if (IS_HIT || demo==='hit') {
-    const seen = Number(localStorage.getItem(KEY)||0);
-    if (seen < 2) {
-      const el = document.getElementById('celebrate');
-      el.classList.add('show');
-      el.addEventListener('click',()=>el.classList.remove('show'));
-      const blast = ()=>confetti({particleCount:160,spread:120,startVelocity:45,origin:{y:0.6}});
-      blast(); setTimeout(blast,600); setTimeout(blast,1200);
-      localStorage.setItem(KEY,String(seen+1));
+
+  function fireConfetti(){
+    const blast = () => confetti({particleCount:160,spread:120,startVelocity:45,origin:{y:0.6}});
+    blast(); setTimeout(blast,600); setTimeout(blast,1200);
+  }
+
+  // ---- audio: fanfare + applause (Web Audio, no external files) ----
+  let audioCtx;
+  function ensureAudioCtx(){
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') return audioCtx.resume();
+    return Promise.resolve();
+  }
+
+  function playFanfare(){
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    // simple triad fanfare (C–G–C)
+    const notes = [261.63, 392.00, 523.25];
+    notes.forEach((freq, i) => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, now + i*0.05);
+      gain.gain.exponentialRampToValueAtTime(0.5, now + i*0.05 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.7 + i*0.02);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(now + i*0.05);
+      osc.stop(now + 0.8 + i*0.02);
+    });
+  }
+
+  function playApplause(){
+    if (!audioCtx) return;
+    // white noise burst with gentle decay = crowd-ish
+    const dur = 1.6;
+    const rate = audioCtx.sampleRate;
+    const buffer = audioCtx.createBuffer(1, rate * dur, rate);
+    const data = buffer.getChannelData(0);
+    for (let i=0;i<data.length;i++){
+      // pink-ish noise
+      const t = i/data.length;
+      data[i] = (Math.random()*2-1) * (1 - t) * 0.7;
+    }
+    const src = audioCtx.createBufferSource();
+    const gain = audioCtx.createGain();
+    gain.gain.value = 0.25;
+    src.buffer = buffer;
+    src.connect(gain).connect(audioCtx.destination);
+    src.start();
+  }
+
+  async function playCelebrationAudio(){
+    try {
+      await ensureAudioCtx();
+      playFanfare();
+      setTimeout(playApplause, 300);
+      return true;
+    } catch(e){
+      return false;
     }
   }
+
+  function showCelebrate(){
+    const el = document.getElementById('celebrate');
+    const btn = document.getElementById('soundBtn');
+    el.classList.add('show');
+
+    // try autoplay first
+    playCelebrationAudio().then(ok => {
+      if (!ok) btn.classList.add('show');
+    });
+
+    // fallback: user gesture
+    btn.addEventListener('click', async () => {
+      const ok = await playCelebrationAudio();
+      if (ok) btn.classList.remove('show');
+    });
+
+    // close on overlay click (keeps sound playing)
+    el.addEventListener('click', (e) => {
+      if (e.target === el) el.classList.remove('show');
+    });
+  }
+
+  (function main(){
+    if (IS_HIT || demo==='hit') {
+      const seen = Number(localStorage.getItem(KEY)||0);
+      if (seen < 2) {
+        showCelebrate();
+        fireConfetti();
+        localStorage.setItem(KEY,String(seen+1));
+      }
+    }
+  })();
 </script>
 </body>
 </html>`;

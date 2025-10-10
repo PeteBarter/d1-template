@@ -77,7 +77,7 @@ h1{
 .samii-logo{
   display:block;
   margin:40px auto 20px;
-  width:360px; /* doubled from 180px */
+  width:360px; /* 200% larger */
   max-width:90vw;
   transition:transform 0.6s ease-in-out, opacity 1s ease-in-out;
   opacity:0;
@@ -192,66 +192,32 @@ function fireConfetti(){
   blast(); setTimeout(blast,600); setTimeout(blast,1200);
 }
 
-// ---- audio ----
-let audioCtx;
-function ensureAudioCtx(){
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  if (audioCtx.state === 'suspended') return audioCtx.resume();
-  return Promise.resolve();
-}
+// ---- Real Audio Files from Pixabay ----
+function playAudioFiles() {
+  const fanfare = new Audio("https://cdn.pixabay.com/download/audio/2021/09/13/audio_34f864d02c.mp3?filename=success-fanfare-trumpets-6185.mp3");
+  const applause = new Audio("https://cdn.pixabay.com/download/audio/2021/09/13/audio_f16e783f1c.mp3?filename=large-crowd-applause-6250.mp3");
 
-function playFanfare(){
-  if (!audioCtx) return;
-  const now = audioCtx.currentTime;
-  const notes = [261.63, 392.00, 523.25];
-  notes.forEach((freq, i) => {
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = 'triangle';
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(0.0001, now + i*0.05);
-    gain.gain.exponentialRampToValueAtTime(0.5, now + i*0.05 + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.7 + i*0.02);
-    osc.connect(gain).connect(audioCtx.destination);
-    osc.start(now + i*0.05);
-    osc.stop(now + 0.8 + i*0.02);
+  fanfare.volume = 0.8;
+  applause.volume = 0.6;
+
+  fanfare.play().then(() => {
+    setTimeout(() => applause.play(), 1800);
+  }).catch(() => {
+    const btn = document.getElementById('soundBtn');
+    if (btn) btn.classList.add('show');
+    btn.onclick = () => {
+      fanfare.play();
+      setTimeout(() => applause.play(), 1800);
+      btn.classList.remove('show');
+    };
   });
-}
-
-function playApplause(){
-  if (!audioCtx) return;
-  const dur = 1.6;
-  const rate = audioCtx.sampleRate;
-  const buffer = audioCtx.createBuffer(1, rate * dur, rate);
-  const data = buffer.getChannelData(0);
-  for (let i=0;i<data.length;i++){
-    const t = i/data.length;
-    data[i] = (Math.random()*2-1)*(1-t)*0.7;
-  }
-  const src = audioCtx.createBufferSource();
-  const gain = audioCtx.createGain();
-  gain.gain.value = 0.25;
-  src.buffer = buffer;
-  src.connect(gain).connect(audioCtx.destination);
-  src.start();
-}
-
-async function playCelebrationAudio(){
-  try {
-    await ensureAudioCtx();
-    playFanfare();
-    setTimeout(playApplause, 300);
-    return true;
-  } catch(e){ return false; }
 }
 
 function showCelebrate(){
   const el = document.getElementById('celebrate');
-  const btn = document.getElementById('soundBtn');
   el.classList.add('show');
-  playCelebrationAudio().then(ok => { if (!ok) btn.classList.add('show'); });
-  btn.addEventListener('click', async ()=>{ const ok = await playCelebrationAudio(); if (ok) btn.classList.remove('show'); });
-  el.addEventListener('click', e => { if (e.target === el) el.classList.remove('show'); });
+  playAudioFiles();
+  fireConfetti();
 }
 
 (function main(){
@@ -259,7 +225,6 @@ function showCelebrate(){
     const seen = Number(localStorage.getItem(KEY)||0);
     if (seen < 2){
       showCelebrate();
-      fireConfetti();
       localStorage.setItem(KEY,String(seen+1));
     }
   }

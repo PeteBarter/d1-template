@@ -1,12 +1,10 @@
 /* src/index.ts
-   SAMii Milestone Tracker + Stripe Webhook (Workers)
-   - KV key "grossAud" (optional) stores running AUD total (fallback=988100)
-   - KV key "latest_payment" stores {name, amount, created}
+   SAMii Milestone Tracker + Stripe Webhook (no audio)
 */
 
 interface Env {
-  SAMII_KV: KVNamespace;           // KV binding (required)
-  STRIPE_WEBHOOK_SECRET: string;   // whsec_… (required for webhook)
+  SAMII_KV: KVNamespace;
+  STRIPE_WEBHOOK_SECRET: string;
 }
 
 const TARGET = 1_000_000;
@@ -20,7 +18,7 @@ export default {
       return handleStripeWebhook(req, env);
     }
 
-    // (Optional tiny JSON endpoint to help debugging)
+    // Optional JSON debug endpoint
     if (url.pathname === "/latest-payment") {
       const lp = await getLatestPayment(env);
       return new Response(JSON.stringify(lp ?? {}), {
@@ -28,13 +26,13 @@ export default {
       });
     }
 
-    // Main page
+    // Main milestone page
     const demo = url.searchParams.get("demo");
-    const gross = await safeGetGross(env); // AUD total
+    const gross = await safeGetGross(env);
     const remaining = Math.max(0, TARGET - gross);
     const percent = Math.min(100, (gross / TARGET) * 100);
     const isHit = gross >= TARGET || demo === "hit";
-    const latestPayment = await getLatestPayment(env); // {name, amount, created} | null
+    const latestPayment = await getLatestPayment(env);
 
     const html = renderPage({
       title: "🎉 SAMii Lesson Payments Milestone Tracker 🎉",
@@ -57,7 +55,6 @@ export default {
 async function safeGetGross(env: Env): Promise<number> {
   try {
     const v = await env.SAMII_KV.get("grossAud");
-    // If you don’t maintain gross in KV yet, this fallback keeps the page working.
     return Number(v ?? "988100");
   } catch {
     return 988100;
@@ -146,11 +143,6 @@ footer{margin:30px 0 10px;color:var(--silver);font-size:14px}
   text-shadow:0 0 20px var(--light-teal),0 0 40px var(--mint);
   animation:flash 1s infinite alternate;margin:0 0 16px;
 }
-.sound-btn{
-  margin:10px 0 0;background:var(--mint);color:#042016;border:none;
-  padding:10px 16px;border-radius:999px;font-weight:700;cursor:pointer;display:none;
-}
-.sound-btn.show{display:inline-block}
 .gifgrid{
   display:flex;flex-wrap:wrap;justify-content:center;gap:20px;margin-top:18px;
 }
@@ -177,7 +169,6 @@ footer{margin:30px 0 10px;color:var(--silver);font-size:14px}
 <div id="celebrate" aria-hidden="true">
   <div class="massive">$1,000,000</div>
   ${creditHtml}
-  <button id="soundBtn" class="sound-btn" type="button">Tap for sound 🔊</button>
   <div class="gifgrid">
     <img src="https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExNjAwc3R1azZ6b280MzkybjF4ZHUzOGc1em85NjUyc3lkZjgxYzNiayZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/5GoVLqeAOo6PK/giphy.gif" alt="Confetti celebration">
     <img src="https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExZXowbGZzZGc0bWNtZTR3eDFlcnE5NW9ia3Z4c2lsaDZib20ydnlkYiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/hZj44bR9FVI3K/giphy.webp" alt="Fireworks">
@@ -197,25 +188,10 @@ function fireConfetti(){
   blast(); setTimeout(blast,600); setTimeout(blast,1200);
 }
 
-// Real audio files (CDN, CC-licensed)
-function playAudioFiles() {
-  const fanfare = new Audio("https://cdn.pixabay.com/download/audio/2022/03/15/audio_2c9aef3ec2.mp3?filename=trumpet-fanfare-117277.mp3");
-  const applause = new Audio("https://cdn.pixabay.com/download/audio/2022/03/15/audio_9e84f17b6a.mp3?filename=small-crowd-applause-117084.mp3");
-  fanfare.volume = 0.8; applause.volume = 0.6;
-  fanfare.play().then(()=>{ setTimeout(()=>applause.play(), 1800); }).catch(()=>{
-    const btn = document.getElementById('soundBtn');
-    if (btn) {
-      btn.classList.add('show');
-      btn.onclick = ()=>{ fanfare.play(); setTimeout(()=>applause.play(),1800); btn.classList.remove('show'); };
-    }
-  });
-}
-
 function showCelebrate(){
   const el = document.getElementById('celebrate');
   el.classList.add('show');
   fireConfetti();
-  playAudioFiles();
   el.addEventListener('click', e => { if (e.target === el) el.classList.remove('show'); });
 }
 
@@ -233,8 +209,6 @@ function showCelebrate(){
 </html>`;
 }
 
-/* ----------------------------- Utilities ----------------------------- */
-
 function escapeHtml(s: string) {
   return s.replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string)
@@ -242,7 +216,6 @@ function escapeHtml(s: string) {
 }
 
 /* -------------------------- Stripe Webhook --------------------------- */
-/* Writes latest payer info to KV: key "latest_payment" */
 
 async function handleStripeWebhook(req: Request, env: Env): Promise<Response> {
   const rawBody = await req.text();
@@ -282,7 +255,7 @@ async function handleStripeWebhook(req: Request, env: Env): Promise<Response> {
   return new Response("ok", { status: 200 });
 }
 
-/* -------- Signature verification (Web Crypto, async) -------- */
+/* -------- Signature verification -------- */
 
 async function verifyStripeSignatureAsync(
   rawBody: string,

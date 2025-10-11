@@ -215,7 +215,7 @@ body{margin:0;background:var(--dark);color:#fff;font-family:system-ui,Segoe UI,R
 .fill{height:100%;width:${(isFinite(o.percentValue)?o.percentValue:0).toFixed(2)}%;background:linear-gradient(90deg,#0d6694,var(--mint))}
 .stats{color:var(--line);font-size:20px;line-height:1.8}.highlight{color:var(--mint);font-weight:700}
 </style></head><body>
-<h1>🎉 SAMii Lesson Payments Milestone Tracker 🎉</h1>
+<h1>🎉 Lesson Payments Milestone Tracker 🎉</h1>
 <div class="bar"><div class="fill"></div></div>
 <div class="stats">
   <div>Total so far: <span class="highlight">${escapeHtml(o.grossText)}</span></div>

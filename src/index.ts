@@ -288,7 +288,7 @@ h1{margin:0;background:linear-gradient(90deg,#3cc99f,#4791b8);-webkit-background
 </style></head><body>
 <img class="samii-logo" src="https://cdn.prod.website-files.com/6642ff26ca1cac64614e0e96/6642ff6de91fa06b733c39c6_SAMii-p-500.png" alt="SAMii logo">
 <script>addEventListener('load',()=>document.querySelector('.samii-logo')?.classList.add('show'));</script>
-<h1>🎉 SAMii Lesson Payments Milestone Tracker 🎉</h1>
+<h1>🎉 Lesson Payments Milestone Tracker 🎉</h1>
 <div class="bar"><div class="fill"></div></div>
 <div class="stats">
   <div>Total so far: <span class="highlight">${escapeHtml(o.grossText)}</span></div>

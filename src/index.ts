@@ -1,5 +1,5 @@
 /* SAMii Milestone Tracker (Cloudflare Worker)
-   Mobile-friendly + Safe render version – Oct 2025
+   Mobile-friendly centering + safe render + full Stripe integration
 */
 
 interface Env {
@@ -19,7 +19,7 @@ export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
 
-    // --- Health check ---
+    // Health check
     if (url.pathname === "/__diag") {
       try {
         await env.MILESTONE_KV.get("ping");
@@ -29,13 +29,13 @@ export default {
       }
     }
 
-    // --- Latest payment debug ---
+    // Debug route
     if (url.pathname === "/latest-payment") {
       const lp = await getLatestPayment(env);
       return json(lp ?? {});
     }
 
-    // --- Admin helper: set latest ---
+    // Admin routes
     if (url.pathname === "/admin/set-latest") {
       if (!isAuthorised(url, env)) return text("unauthorised", 401);
       const name = (url.searchParams.get("name") || "Test").slice(0, 120);
@@ -47,19 +47,18 @@ export default {
       return text(`ok: ${name} (${amount})`);
     }
 
-    // --- Admin helper: reset latest ---
     if (url.pathname === "/admin/reset-latest") {
       if (!isAuthorised(url, env)) return text("unauthorised", 401);
       await env.MILESTONE_KV.delete(LATEST_KEY);
       return text("ok: cleared");
     }
 
-    // --- Stripe webhook ---
+    // Stripe webhook
     if (url.pathname === "/stripe-webhook" && req.method === "POST") {
       return handleStripeWebhook(req, env);
     }
 
-    // --- Main milestone page ---
+    // Public milestone page
     try {
       const gross = await safeReadGrossAud(env);
       const remaining = Math.max(0, TARGET_AUD - gross);
@@ -77,7 +76,6 @@ export default {
       return htmlResponse(html);
     } catch (err: any) {
       console.error("Render issue:", err);
-      // ✅ SAFETY PATCH
       const html = renderPage({
         grossText: "A$988,100",
         remainingText: "A$11,900",
@@ -106,7 +104,6 @@ async function safeReadGrossAud(env: Env): Promise<number> {
     const cents = parseInt(raw ?? "0", 10);
     return Number.isFinite(cents) ? Math.round(cents / 100) : 988100;
   } catch (e) {
-    console.warn("readGrossAud fallback:", e);
     return 988100;
   }
 }
@@ -123,8 +120,7 @@ async function safeGetLatestPayment(
       amount: Number(val.amount ?? 0),
       created: String(val.created ?? new Date().toISOString()),
     };
-  } catch (e) {
-    console.warn("latest_payment parse fallback:", e);
+  } catch {
     return null;
   }
 }
@@ -282,27 +278,30 @@ h1{margin:0;background:linear-gradient(90deg,#3cc99f,#4791b8);
 .stats{font-size:20px;color:#ddd}
 .highlight{color:#3cc99f;font-weight:700}
 .credit{font-size:22px;color:#3cc99f;margin-top:10px}
+
+/* Celebration overlay */
 #celebrate{
-  position:fixed;inset:0;display:none;align-items:flex-start;
-  justify-content:center;background:rgba(0,0,0,.75);
-  flex-direction:column;z-index:50;padding-top:100px;overflow-y:auto;
+  position:fixed;inset:0;display:none;
+  flex-direction:column;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.75);z-index:50;padding:40px 0;overflow-y:auto;
 }
 #celebrate.show{display:flex;animation:fadein .4s}
 .massive{font-size:clamp(60px,12vw,160px);font-weight:700;color:#3cc99f;
   text-shadow:0 0 20px #4791b8,0 0 40px #3cc99f;
-  animation:flash 1s infinite alternate;margin:0 0 16px}
-.gifgrid{display:flex;flex-wrap:wrap;justify-content:center;
-  gap:20px;margin-top:20px;padding-bottom:60px}
+  animation:flash 1s infinite alternate;margin:0 0 24px}
+.gifgrid{display:flex;flex-wrap:wrap;justify-content:center;gap:20px;
+  margin-top:10px;padding-bottom:40px}
 .gifgrid img{width:320px;max-width:90vw;border-radius:12px;
   box-shadow:0 6px 24px rgba(0,0,0,.35)}
-@keyframes flash{0%{opacity:1}50%{opacity:.6;transform:scale(1.05)}100%{opacity:1}}
+@keyframes flash{0%{opacity:1;transform:scale(1)}50%{opacity:.7;transform:scale(1.05)}100%{opacity:1;transform:scale(1)}}
 @keyframes fadein{from{opacity:0}to{opacity:1}}
 @media(max-width:600px){
-  #celebrate{padding-top:160px}
+  #celebrate{justify-content:flex-start;padding-top:20vh}
   .massive{font-size:clamp(48px,14vw,120px)}
   .gifgrid img{width:90vw}
 }
-</style></head><body>
+</style>
+</head><body>
 <img class="samii-logo" src="https://cdn.prod.website-files.com/6642ff26ca1cac64614e0e96/6642ff6de91fa06b733c39c6_SAMii-p-500.png" alt="SAMii logo">
 <script>addEventListener('load',()=>document.querySelector('.samii-logo')?.classList.add('show'));</script>
 <h1>🎉 SAMii Lesson Payments Milestone Tracker 🎉</h1>
@@ -337,7 +336,7 @@ h1{margin:0;background:linear-gradient(90deg,#3cc99f,#4791b8);
 </body></html>`;
 }
 
-/* ====================== Utils ====================== */
+/* ====================== Utilities ====================== */
 
 function escapeHtml(s: string) {
   return s.replace(/[&<>"']/g, (c) =>

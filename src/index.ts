@@ -1,5 +1,5 @@
 /* SAMii Milestone Tracker (Cloudflare Worker)
-   Safe render version - Oct 2025
+   Mobile-friendly + Safe render version – Oct 2025
 */
 
 interface Env {
@@ -13,7 +13,7 @@ const GROSS_KEY = "total_cents";
 const LATEST_KEY = "latest_payment";
 const DEDUPE_PREF = "evt:";
 
-/* ====================== Main fetch handler ====================== */
+/* ====================== Main handler ====================== */
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
@@ -29,7 +29,7 @@ export default {
       }
     }
 
-    // --- Latest-payment debug ---
+    // --- Latest payment debug ---
     if (url.pathname === "/latest-payment") {
       const lp = await getLatestPayment(env);
       return json(lp ?? {});
@@ -54,12 +54,12 @@ export default {
       return text("ok: cleared");
     }
 
-    // --- Stripe webhook handler ---
+    // --- Stripe webhook ---
     if (url.pathname === "/stripe-webhook" && req.method === "POST") {
       return handleStripeWebhook(req, env);
     }
 
-    // --- Main public milestone page ---
+    // --- Main milestone page ---
     try {
       const gross = await safeReadGrossAud(env);
       const remaining = Math.max(0, TARGET_AUD - gross);
@@ -77,7 +77,7 @@ export default {
       return htmlResponse(html);
     } catch (err: any) {
       console.error("Render issue:", err);
-      // ✅ SAFETY PATCH: Always load fallback page
+      // ✅ SAFETY PATCH
       const html = renderPage({
         grossText: "A$988,100",
         remainingText: "A$11,900",
@@ -200,7 +200,7 @@ async function handleStripeWebhook(req: Request, env: Env) {
   }
 }
 
-/* ====================== Signature verification ====================== */
+/* ====================== Signature check ====================== */
 
 async function verifyStripeSignatureAsync(
   body: string,
@@ -246,7 +246,7 @@ function unixToIso(sec: number) {
   return new Date(sec * 1000).toISOString();
 }
 
-/* ====================== HTML renderer ====================== */
+/* ====================== Renderer ====================== */
 
 function renderPage(o: {
   grossText: string;
@@ -267,45 +267,58 @@ function renderPage(o: {
 <title>SAMii Milestone</title>
 <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;700&display=swap" rel="stylesheet">
 <style>
-body{margin:0;background:#0d3447;color:#fff;font-family:'Comfortaa',sans-serif;text-align:center;overflow-x:hidden}
+body{
+  margin:0;background:#0d3447;color:#fff;font-family:'Comfortaa',sans-serif;
+  text-align:center;overflow-x:hidden;
+}
 .samii-logo{display:block;margin:40px auto 20px;width:360px;max-width:90vw;transition:.6s;opacity:0}
 .samii-logo.show{transform:scale(1.1);opacity:1}
-h1{margin:0;background:linear-gradient(90deg,#3cc99f,#4791b8);-webkit-background-clip:text;color:transparent;font-size:clamp(24px,3vw,42px)}
-.bar{width:min(860px,92vw);height:32px;margin:40px auto 20px;background:rgba(255,255,255,.2);border-radius:20px;overflow:hidden}
-.fill{height:100%;width:${o.percentValue.toFixed(
-    2
-  )}%;background:linear-gradient(90deg,#0d6694,#3cc99f);transition:.5s}
+h1{margin:0;background:linear-gradient(90deg,#3cc99f,#4791b8);
+  -webkit-background-clip:text;color:transparent;font-size:clamp(24px,3vw,42px)}
+.bar{width:min(860px,92vw);height:32px;margin:40px auto 20px;
+  background:rgba(255,255,255,.2);border-radius:20px;overflow:hidden}
+.fill{height:100%;width:${o.percentValue.toFixed(2)}%;
+  background:linear-gradient(90deg,#0d6694,#3cc99f);transition:.5s}
 .stats{font-size:20px;color:#ddd}
 .highlight{color:#3cc99f;font-weight:700}
 .credit{font-size:22px;color:#3cc99f;margin-top:10px}
-#celebrate{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.75);flex-direction:column;z-index:50}
+#celebrate{
+  position:fixed;inset:0;display:none;align-items:flex-start;
+  justify-content:center;background:rgba(0,0,0,.75);
+  flex-direction:column;z-index:50;padding-top:100px;overflow-y:auto;
+}
 #celebrate.show{display:flex;animation:fadein .4s}
-.massive{font-size:clamp(60px,12vw,160px);font-weight:700;color:#3cc99f;text-shadow:0 0 20px #4791b8,0 0 40px #3cc99f;animation:flash 1s infinite alternate;margin:0}
-.gifgrid{display:flex;flex-wrap:wrap;justify-content:center;gap:20px;margin-top:18px}
-.gifgrid img{width:320px;max-width:90vw;border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.35)}
+.massive{font-size:clamp(60px,12vw,160px);font-weight:700;color:#3cc99f;
+  text-shadow:0 0 20px #4791b8,0 0 40px #3cc99f;
+  animation:flash 1s infinite alternate;margin:0 0 16px}
+.gifgrid{display:flex;flex-wrap:wrap;justify-content:center;
+  gap:20px;margin-top:20px;padding-bottom:60px}
+.gifgrid img{width:320px;max-width:90vw;border-radius:12px;
+  box-shadow:0 6px 24px rgba(0,0,0,.35)}
 @keyframes flash{0%{opacity:1}50%{opacity:.6;transform:scale(1.05)}100%{opacity:1}}
 @keyframes fadein{from{opacity:0}to{opacity:1}}
+@media(max-width:600px){
+  #celebrate{padding-top:160px}
+  .massive{font-size:clamp(48px,14vw,120px)}
+  .gifgrid img{width:90vw}
+}
 </style></head><body>
 <img class="samii-logo" src="https://cdn.prod.website-files.com/6642ff26ca1cac64614e0e96/6642ff6de91fa06b733c39c6_SAMii-p-500.png" alt="SAMii logo">
 <script>addEventListener('load',()=>document.querySelector('.samii-logo')?.classList.add('show'));</script>
-<h1>🎉 Lesson Payments Milestone Tracker 🎉</h1>
+<h1>🎉 SAMii Lesson Payments Milestone Tracker 🎉</h1>
 <div class="bar"><div class="fill"></div></div>
 <div class="stats">
   <div>Total so far: <span class="highlight">${escapeHtml(o.grossText)}</span></div>
-  <div>Remaining to $1M: <span class="highlight">${escapeHtml(
-    o.remainingText
-  )}</span></div>
+  <div>Remaining to $1M: <span class="highlight">${escapeHtml(o.remainingText)}</span></div>
   <div>Progress: <span class="highlight">${escapeHtml(o.percentText)}</span></div>
 </div>${credit}
 <footer style="margin:20px;color:#aaa">Updated automatically • SAMii.com.au</footer>
 <div id="celebrate">
   <div class="massive">$1,000,000</div>
-  ${o.latestPayment ? `<p class="credit">Milestone reached thanks to <strong>${escapeHtml(
-    o.latestPayment.name
-  )}</strong>!</p>` : ""}
+  ${o.latestPayment ? `<p class="credit">Milestone reached thanks to <strong>${escapeHtml(o.latestPayment.name)}</strong>!</p>` : ""}
   <div class="gifgrid">
-    <img src="https://media1.giphy.com/media/5GoVLqeAOo6PK/giphy.gif">
-    <img src="https://media3.giphy.com/media/hZj44bR9FVI3K/giphy.webp">
+    <img src="https://media1.giphy.com/media/5GoVLqeAOo6PK/giphy.gif" alt="Celebration 1">
+    <img src="https://media3.giphy.com/media/hZj44bR9FVI3K/giphy.webp" alt="Celebration 2">
   </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>

@@ -4,7 +4,7 @@ html_content = r"""<!DOCTYPE html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SAMii • Lesson Payments Milestone Tracker (Static)</title>
+  <title>SAMii • Payments Milestone Tracker (Static)</title>
   <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
     :root{

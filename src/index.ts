@@ -125,7 +125,7 @@ export default {
   </div>
 
   <script>
-    const TOTAL_AUD = 999_300; // update manually each morning
+    const TOTAL_AUD = 996_300; // update manually each morning
     const TARGET = 1_000_000;
 
     function fmtAUD(n){
@@ -203,7 +203,7 @@ export default {
         requestAnimationFrame(step);
       }
       step();
-      setTimeout(() => { running = false; }, 10000);
+      setTimeout(() => { running = false; }, 80000);
     }
   </script>
 </body>

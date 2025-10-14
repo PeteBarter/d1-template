@@ -1,4 +1,7 @@
-<!DOCTYPE html>
+/* src/index.ts – Static SAMii milestone page served by a Worker */
+export default {
+  async fetch(_req: Request): Promise<Response> {
+    const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -69,59 +72,33 @@
       line-height: 1.9;
       font-size: clamp(18px, 2vw, 24px);
     }
-    .numbers b{
-      color: var(--accent);
-      font-weight:700;
-    }
+    .numbers b{ color: var(--accent); font-weight:700; }
     .footer{
       margin-top: 22px;
       color: #9fd1c9;
       font-size: 14px;
       opacity:.9;
     }
-    /* Celebration overlay */
     .celebrate{
-      position: fixed;
-      inset: 0;
-      display:none;
-      place-items: center;
-      background: rgba(0,0,0,.35);
-      z-index: 10;
-      pointer-events: none;
+      position: fixed; inset: 0; display:none; place-items: center;
+      background: rgba(0,0,0,.35); z-index: 10; pointer-events: none;
     }
     .celebrate .card{
       background: linear-gradient(180deg, #0f3a48, #0e2f3a);
       border: 1px solid rgba(255,255,255,.08);
       border-radius: 18px;
-      padding: 22px 18px;
-      width:min(560px, 92vw);
-      text-align:center;
+      padding: 22px 18px; width:min(560px, 92vw); text-align:center;
       box-shadow: 0 30px 80px rgba(0,0,0,.45), var(--glow);
       animation: pop .6s ease-out both;
     }
-    .celebrate h2{
-      margin: 8px 0 6px;
-      font-size: clamp(22px, 3vw, 30px);
-    }
+    .celebrate h2{ margin: 8px 0 6px; font-size: clamp(22px, 3vw, 30px); }
     .celebrate p{ margin: 0 0 8px; color:var(--muted) }
     .celebrate .badge{
-      font-size: clamp(26px, 4vw, 40px);
-      font-weight: 700;
-      letter-spacing:.04em;
-      color: #d6fff5;
-      text-shadow: 0 6px 30px rgba(25,211,157,.45);
+      font-size: clamp(26px, 4vw, 40px); font-weight: 700; letter-spacing:.04em;
+      color: #d6fff5; text-shadow: 0 6px 30px rgba(25,211,157,.45);
     }
-    @keyframes pop{
-      from{ transform: translateY(8px) scale(.98); opacity: 0; }
-      to{ transform:none; opacity: 1; }
-    }
-    #confetti{
-      position: fixed;
-      inset: 0;
-      z-index: 9;
-      pointer-events:none;
-      display:none;
-    }
+    @keyframes pop{ from{ transform: translateY(8px) scale(.98); opacity: 0; } to{ transform:none; opacity: 1; } }
+    #confetti{ position: fixed; inset: 0; z-index: 9; pointer-events:none; display:none; }
   </style>
 </head>
 <body>
@@ -129,15 +106,11 @@
     <div class="logo">
       <img src="https://cdn.prod.website-files.com/6642ff26ca1cac64614e0e96/6642ff6de91fa06b733c39c6_SAMii-p-500.png" alt="SAMii logo" />
     </div>
-
     <div class="sub">🎉 <span>Lesson Payments Milestone Tracker</span> 🎉</div>
-
     <div class="bar" aria-label="Progress to A$1,000,000">
       <div class="fill" id="fill" role="progressbar" aria-valuemin="0" aria-valuemax="100"></div>
     </div>
-
     <div class="numbers" id="numbers"></div>
-
     <div class="footer">Updated manually • SAMii.com.au</div>
   </div>
 
@@ -152,7 +125,7 @@
   </div>
 
   <script>
-    const TOTAL_AUD = 988100; // <— update manually each morning
+    const TOTAL_AUD = 988100; // update manually each morning
     const TARGET = 1_000_000;
 
     function fmtAUD(n){
@@ -167,9 +140,9 @@
     const remaining = Math.max(0, TARGET - TOTAL_AUD);
 
     numbers.innerHTML = [
-      `Total so far: <b>${fmtAUD(TOTAL_AUD)}</b>`,
-      `Remaining to $1M: <b>${fmtAUD(remaining)}</b>`,
-      `Progress: <b>${fmtPct(progress * 100)}</b>`
+      \`Total so far: <b>\${fmtAUD(TOTAL_AUD)}</b>\`,
+      \`Remaining to $1M: <b>\${fmtAUD(remaining)}</b>\`,
+      \`Progress: <b>\${fmtPct(progress * 100)}</b>\`
     ].join('<br/>');
 
     fill.style.width = (progress * 100) + '%';
@@ -202,9 +175,7 @@
           const w = 6 + Math.random()*10;
           const h = 8 + Math.random()*14;
           pieces.push({
-            x: Math.random()*W,
-            y: -20,
-            w, h,
+            x: Math.random()*W, y: -20, w, h,
             a: Math.random()*Math.PI*2,
             v: { x: (Math.random() - .5) * 1.2, y: 1.5 + Math.random()*2.5 },
             rot: (Math.random() - .5) * .2,
@@ -224,11 +195,8 @@
           p.a += p.rot;
         }
         for (const p of pieces){
-          ctx.save();
-          ctx.translate(p.x, p.y);
-          ctx.rotate(p.a);
-          ctx.fillStyle = p.col;
-          ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
+          ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a);
+          ctx.fillStyle = p.col; ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
           ctx.restore();
         }
         pieces = pieces.filter(p => p.y < H + 40);
@@ -239,4 +207,7 @@
     }
   </script>
 </body>
-</html>
+</html>`;
+    return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
+  }
+};

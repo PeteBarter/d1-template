@@ -77,10 +77,10 @@ export default {
     } catch (err: any) {
       console.error("Render issue:", err);
       const html = renderPage({
-        grossText: "A$988,100",
-        remainingText: "A$11,900",
-        percentText: "98.81%",
-        percentValue: 98.81,
+        grossText: "A$1,000,032",
+        remainingText: "A$0",
+        percentText: "100%",
+        percentValue: 100%,
         isHit: false,
         latestPayment: null,
       });

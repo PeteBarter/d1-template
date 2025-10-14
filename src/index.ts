@@ -1,358 +1,296 @@
-/* SAMii Milestone Tracker (Cloudflare Worker)
-   Mobile-friendly centering + safe render + full Stripe integration
-*/
-
-interface Env {
-  MILESTONE_KV: KVNamespace;
-  STRIPE_WEBHOOK_SECRET: string;
-  ADMIN_TOKEN?: string;
-}
-
-const TARGET_AUD = 1_000_000;
-const GROSS_KEY = "total_cents";
-const LATEST_KEY = "latest_payment";
-const DEDUPE_PREF = "evt:";
-
-/* ====================== Main handler ====================== */
-
-export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
-    const url = new URL(req.url);
-
-    // Health check
-    if (url.pathname === "/__diag") {
-      try {
-        await env.MILESTONE_KV.get("ping");
-        return json({ ok: true });
-      } catch (e: any) {
-        return json({ ok: false, error: String(e?.message ?? e) }, 500);
-      }
+# Create a standalone HTML file for the SAMii Milestone Tracker (static / manual update)
+html_content = r"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SAMii • Lesson Payments Milestone Tracker (Static)</title>
+  <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#0e2a33;
+      --card:#0f3340;
+      --text:#e9f5f4;
+      --muted:#bfe7e2;
+      --accent:#2cd3b8;
+      --accent2:#12a8a8;
+      --barStart:#0d6aa2;
+      --barEnd:#19d39d;
+      --glow: 0 10px 40px rgba(25, 211, 157, .35);
     }
-
-    // Debug route
-    if (url.pathname === "/latest-payment") {
-      const lp = await getLatestPayment(env);
-      return json(lp ?? {});
+    * { box-sizing: border-box; }
+    html, body { height:100%; }
+    body{
+      margin:0;
+      font-family: 'Comfortaa', system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";
+      background: radial-gradient(1200px 800px at 80% -10%, #174354 0%, var(--bg) 45%) fixed,
+                  radial-gradient(1000px 700px at -10% 120%, #143745 0%, var(--bg) 50%) fixed,
+                  var(--bg);
+      color:var(--text);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:40px 16px;
     }
-
-    // Admin routes
-    if (url.pathname === "/admin/set-latest") {
-      if (!isAuthorised(url, env)) return text("unauthorised", 401);
-      const name = (url.searchParams.get("name") || "Test").slice(0, 120);
-      const amount = Number(url.searchParams.get("amount") || "42");
-      await env.MILESTONE_KV.put(
-        LATEST_KEY,
-        JSON.stringify({ name, amount, created: new Date().toISOString() })
-      );
-      return text(`ok: ${name} (${amount})`);
+    .wrap{
+      width:min(1000px, calc(100% - 24px));
+      text-align:center;
     }
-
-    if (url.pathname === "/admin/reset-latest") {
-      if (!isAuthorised(url, env)) return text("unauthorised", 401);
-      await env.MILESTONE_KV.delete(LATEST_KEY);
-      return text("ok: cleared");
+    .logo{
+      font-weight:700;
+      letter-spacing:.08em;
+      font-size: clamp(36px, 5vw, 68px);
+      line-height:1;
+      margin: 6px 0 10px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:14px;
+      filter: drop-shadow(0 4px 20px rgba(0,0,0,.2));
     }
-
-    // Stripe webhook
-    if (url.pathname === "/stripe-webhook" && req.method === "POST") {
-      return handleStripeWebhook(req, env);
+    .logo .bot{
+      width: clamp(44px, 7vw, 72px);
+      height: clamp(44px, 7vw, 72px);
+      border-radius:20px;
+      background:
+        radial-gradient(circle at 32% 38%, #a9f1ff 0 3px, transparent 4px),
+        radial-gradient(circle at 68% 38%, #a9f1ff 0 3px, transparent 4px),
+        radial-gradient(circle at 50% 65%, #a9f1ff 0 6px, transparent 8px),
+        linear-gradient(180deg, #c6f6ff 0%, #9fd5ff 50%, #6dbce8 100%);
+      box-shadow: inset 0 -4px 8px rgba(0,0,0,.25), 0 8px 24px rgba(0,0,0,.25);
+      position:relative;
     }
-
-    // Public milestone page
-    try {
-      const gross = await safeReadGrossAud(env);
-      const remaining = Math.max(0, TARGET_AUD - gross);
-      const percent = Math.min(100, (gross / TARGET_AUD) * 100);
-      const latestPayment = await safeGetLatestPayment(env);
-
-      const html = renderPage({
-        grossText: `A$${gross.toLocaleString()}`,
-        remainingText: `A$${remaining.toLocaleString()}`,
-        percentText: `${percent.toFixed(2)}%`,
-        percentValue: percent,
-        isHit: gross >= TARGET_AUD,
-        latestPayment,
-      });
-      return htmlResponse(html);
-    } catch (err: any) {
-      console.error("Render issue:", err);
-      const html = renderPage({
-        grossText: "A$1,000,032",
-        remainingText: "A$0",
-        percentText: "100%",
-        percentValue: 100%,
-        isHit: false,
-        latestPayment: null,
-      });
-      return htmlResponse(html);
+    .logo .txt{
+      letter-spacing:.22em;
+      background: linear-gradient(180deg, #d8f7ff 0%, #cbefff 40%, #a9dff7 80%);
+      -webkit-background-clip:text;
+      background-clip:text;
+      color:transparent;
     }
-  },
-};
-
-/* ====================== KV helpers ====================== */
-
-async function addCents(env: Env, cents: number) {
-  const raw = await env.MILESTONE_KV.get(GROSS_KEY);
-  const current = parseInt(raw ?? "0", 10) || 0;
-  const next = current + Math.max(0, cents | 0);
-  await env.MILESTONE_KV.put(GROSS_KEY, String(next));
-}
-
-async function safeReadGrossAud(env: Env): Promise<number> {
-  try {
-    const raw = await env.MILESTONE_KV.get(GROSS_KEY);
-    const cents = parseInt(raw ?? "0", 10);
-    return Number.isFinite(cents) ? Math.round(cents / 100) : 988100;
-  } catch (e) {
-    return 988100;
-  }
-}
-
-async function safeGetLatestPayment(
-  env: Env
-): Promise<null | { name: string; amount: number; created: string }> {
-  try {
-    const raw = await env.MILESTONE_KV.get(LATEST_KEY);
-    if (!raw) return null;
-    const val = JSON.parse(raw);
-    return {
-      name: String(val.name ?? "Unknown"),
-      amount: Number(val.amount ?? 0),
-      created: String(val.created ?? new Date().toISOString()),
-    };
-  } catch {
-    return null;
-  }
-}
-
-async function markProcessed(env: Env, id: string) {
-  const key = DEDUPE_PREF + id;
-  if (await env.MILESTONE_KV.get(key)) return false;
-  await env.MILESTONE_KV.put(key, "1", { expirationTtl: 60 * 60 * 24 * 14 });
-  return true;
-}
-
-/* ====================== Stripe webhook ====================== */
-
-async function handleStripeWebhook(req: Request, env: Env) {
-  const raw = await req.text();
-  const sig = req.headers.get("stripe-signature") || "";
-
-  try {
-    await verifyStripeSignatureAsync(raw, sig, env.STRIPE_WEBHOOK_SECRET, 1800);
-  } catch (err: any) {
-    console.log("Stripe verify failed:", err?.message);
-    return text("Signature verification failed", 400);
-  }
-
-  const event = JSON.parse(raw);
-  const id = event.id || "";
-  if (!id) return text("Missing id", 400);
-  if (!(await markProcessed(env, id))) return text("duplicate", 200);
-
-  const type = event.type;
-  try {
-    if (type === "charge.succeeded") {
-      const ch = event.data.object;
-      if ((ch.currency || "").toLowerCase() === "aud")
-        await addCents(env, ch.amount);
-      const name = ch.billing_details?.name || "Unknown";
-      await env.MILESTONE_KV.put(
-        LATEST_KEY,
-        JSON.stringify({
-          name,
-          amount: ch.amount / 100,
-          created: unixToIso(event.created),
-        })
-      );
-      return text("ok");
+    .sub{
+      margin: 4px 0 26px;
+      font-size: clamp(18px, 2.2vw, 28px);
+      color: var(--muted);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:10px;
     }
-
-    if (
-      type === "payment_intent.succeeded" ||
-      type === "checkout.session.completed"
-    ) {
-      const obj = event.data.object;
-      const name =
-        obj.customer_details?.name ||
-        obj.billing_details?.name ||
-        obj.shipping?.name ||
-        "Unknown";
-      await env.MILESTONE_KV.put(
-        LATEST_KEY,
-        JSON.stringify({
-          name,
-          amount: (obj.amount_total ?? obj.amount ?? 0) / 100,
-          created: unixToIso(event.created),
-        })
-      );
-      return text("ok");
+    .bar{
+      position:relative;
+      height: 22px;
+      background: linear-gradient(180deg, #0c4055, #0a3446);
+      border-radius: 16px;
+      padding: 4px;
+      box-shadow: inset 0 2px 10px rgba(0,0,0,.45);
     }
+    .bar > .fill{
+      height: 100%;
+      width: 0%;
+      border-radius: 12px;
+      background: linear-gradient(90deg, var(--barStart), var(--barEnd));
+      box-shadow: var(--glow);
+      transition: width 900ms ease-in-out;
+    }
+    .numbers{
+      margin: 26px 0 18px;
+      line-height: 1.9;
+      font-size: clamp(18px, 2vw, 24px);
+    }
+    .numbers b{
+      color: var(--accent);
+      font-weight:700;
+    }
+    .footer{
+      margin-top: 22px;
+      color: #9fd1c9;
+      font-size: 14px;
+      opacity:.9;
+    }
+    /* Celebration overlay */
+    .celebrate{
+      position: fixed;
+      inset: 0;
+      display:none;
+      place-items: center;
+      background: rgba(0,0,0,.35);
+      z-index: 10;
+      pointer-events: none;
+    }
+    .celebrate .card{
+      background: linear-gradient(180deg, #0f3a48, #0e2f3a);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 18px;
+      padding: 22px 18px;
+      width:min(560px, 92vw);
+      text-align:center;
+      box-shadow: 0 30px 80px rgba(0,0,0,.45), var(--glow);
+      animation: pop .6s ease-out both;
+    }
+    .celebrate h2{
+      margin: 8px 0 6px;
+      font-size: clamp(22px, 3vw, 30px);
+    }
+    .celebrate p{ margin: 0 0 8px; color:var(--muted) }
+    .celebrate .badge{
+      font-size: clamp(26px, 4vw, 40px);
+      font-weight: 700;
+      letter-spacing:.04em;
+      color: #d6fff5;
+      text-shadow: 0 6px 30px rgba(25,211,157,.45);
+    }
+    @keyframes pop{
+      from{ transform: translateY(8px) scale(.98); opacity: 0; }
+      to{ transform:none; opacity: 1; }
+    }
+    /* Canvas covers page for confetti */
+    #confetti{
+      position: fixed;
+      inset: 0;
+      z-index: 9;
+      pointer-events:none;
+      display:none;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="logo" aria-label="SAMii">
+      <div class="txt">SAMii</div>
+      <div class="bot" aria-hidden="true"></div>
+    </div>
 
-    return text("ignored");
-  } catch (err: any) {
-    console.error("KV write failed:", err);
-    return text("KV write failed", 500);
-  }
-}
+    <div class="sub">🎉 <span>Lesson Payments Milestone Tracker</span> 🎉</div>
 
-/* ====================== Signature check ====================== */
+    <div class="bar" aria-label="Progress to A$1,000,000">
+      <div class="fill" id="fill" role="progressbar" aria-valuemin="0" aria-valuemax="100"></div>
+    </div>
 
-async function verifyStripeSignatureAsync(
-  body: string,
-  sig: string,
-  secret: string,
-  tol = 300
-) {
-  const parts = Object.fromEntries(sig.split(",").map((p) => p.trim().split("=")));
-  const t = Number(parts.t),
-    v1 = parts.v1;
-  if (!t || !v1) throw new Error("Bad signature header");
+    <div class="numbers" id="numbers">
+      <!-- Populated by JS -->
+    </div>
 
-  const now = Math.floor(Date.now() / 1000);
-  if (Math.abs(now - t) > tol) throw new Error("Timestamp outside tolerance");
-
-  const expected = await hmacSHA256(secret, `${t}.${body}`);
-  if (!timingSafeEqual(expected, v1)) throw new Error("Signature mismatch");
-}
-
-async function hmacSHA256(secret: string, data: string) {
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(data));
-  return Array.from(new Uint8Array(sig))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-function timingSafeEqual(a: string, b: string) {
-  if (a.length !== b.length) return false;
-  let r = 0;
-  for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return r === 0;
-}
-
-function unixToIso(sec: number) {
-  return new Date(sec * 1000).toISOString();
-}
-
-/* ====================== Renderer ====================== */
-
-function renderPage(o: {
-  grossText: string;
-  remainingText: string;
-  percentText: string;
-  percentValue: number;
-  isHit: boolean;
-  latestPayment: null | { name: string; amount: number; created: string };
-}) {
-  const credit = o.latestPayment
-    ? `<p class="credit">Latest payment from <strong>${escapeHtml(
-        o.latestPayment.name
-      )}</strong> for A$${o.latestPayment.amount.toFixed(2)}</p>`
-    : "";
-
-  return `<!doctype html><html lang="en"><head>
-<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>SAMii Milestone</title>
-<link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;700&display=swap" rel="stylesheet">
-<style>
-body{
-  margin:0;background:#0d3447;color:#fff;font-family:'Comfortaa',sans-serif;
-  text-align:center;overflow-x:hidden;
-}
-.samii-logo{display:block;margin:40px auto 20px;width:360px;max-width:90vw;transition:.6s;opacity:0}
-.samii-logo.show{transform:scale(1.1);opacity:1}
-h1{margin:0;background:linear-gradient(90deg,#3cc99f,#4791b8);
-  -webkit-background-clip:text;color:transparent;font-size:clamp(24px,3vw,42px)}
-.bar{width:min(860px,92vw);height:32px;margin:40px auto 20px;
-  background:rgba(255,255,255,.2);border-radius:20px;overflow:hidden}
-.fill{height:100%;width:${o.percentValue.toFixed(2)}%;
-  background:linear-gradient(90deg,#0d6694,#3cc99f);transition:.5s}
-.stats{font-size:20px;color:#ddd}
-.highlight{color:#3cc99f;font-weight:700}
-.credit{font-size:22px;color:#3cc99f;margin-top:10px}
-
-/* Celebration overlay */
-#celebrate{
-  position:fixed;inset:0;display:none;
-  flex-direction:column;align-items:center;justify-content:center;
-  background:rgba(0,0,0,.75);z-index:50;padding:40px 0;overflow-y:auto;
-}
-#celebrate.show{display:flex;animation:fadein .4s}
-.massive{font-size:clamp(60px,12vw,160px);font-weight:700;color:#3cc99f;
-  text-shadow:0 0 20px #4791b8,0 0 40px #3cc99f;
-  animation:flash 1s infinite alternate;margin:0 0 24px}
-.gifgrid{display:flex;flex-wrap:wrap;justify-content:center;gap:20px;
-  margin-top:10px;padding-bottom:40px}
-.gifgrid img{width:320px;max-width:90vw;border-radius:12px;
-  box-shadow:0 6px 24px rgba(0,0,0,.35)}
-@keyframes flash{0%{opacity:1;transform:scale(1)}50%{opacity:.7;transform:scale(1.05)}100%{opacity:1;transform:scale(1)}}
-@keyframes fadein{from{opacity:0}to{opacity:1}}
-@media(max-width:600px){
-  #celebrate{justify-content:flex-start;padding-top:20vh}
-  .massive{font-size:clamp(48px,14vw,120px)}
-  .gifgrid img{width:90vw}
-}
-</style>
-</head><body>
-<img class="samii-logo" src="https://cdn.prod.website-files.com/6642ff26ca1cac64614e0e96/6642ff6de91fa06b733c39c6_SAMii-p-500.png" alt="SAMii logo">
-<script>addEventListener('load',()=>document.querySelector('.samii-logo')?.classList.add('show'));</script>
-<h1>🎉Lesson Payments Milestone Tracker 🎉</h1>
-<div class="bar"><div class="fill"></div></div>
-<div class="stats">
-  <div>Total so far: <span class="highlight">${escapeHtml(o.grossText)}</span></div>
-  <div>Remaining to $1M: <span class="highlight">${escapeHtml(o.remainingText)}</span></div>
-  <div>Progress: <span class="highlight">${escapeHtml(o.percentText)}</span></div>
-</div>${credit}
-<footer style="margin:20px;color:#aaa">Updated automatically • SAMii.com.au</footer>
-<div id="celebrate">
-  <div class="massive">$1,000,000</div>
-  ${o.latestPayment ? `<p class="credit">Milestone reached thanks to <strong>${escapeHtml(o.latestPayment.name)}</strong>!</p>` : ""}
-  <div class="gifgrid">
-    <img src="https://media1.giphy.com/media/5GoVLqeAOo6PK/giphy.gif" alt="Celebration 1">
-    <img src="https://media3.giphy.com/media/hZj44bR9FVI3K/giphy.webp" alt="Celebration 2">
+    <div class="footer">Updated manually • SAMii.com.au</div>
   </div>
-</div>
-<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
-<script>
-(function(){
- const params=new URLSearchParams(location.search);
- const demo=params.get('demo');
- const IS_HIT=${o.isHit?"true":"false"};
- const KEY='samii_seen_v1';
- function blast(){confetti({particleCount:160,spread:120,startVelocity:45,origin:{y:.6}});}
- function show(){const el=document.getElementById('celebrate');el.classList.add('show');blast();setTimeout(blast,600);}
- if(demo==='reset')localStorage.removeItem(KEY);
- if(IS_HIT||demo==='hit'){const seen=+localStorage.getItem(KEY)||0;if(seen<2){show();localStorage.setItem(KEY,seen+1);}}
-})();
-</script>
-</body></html>`;
-}
 
-/* ====================== Utilities ====================== */
+  <!-- Celebration UI -->
+  <canvas id="confetti"></canvas>
+  <div class="celebrate" id="celebrate">
+    <div class="card">
+      <div style="font-size:42px" aria-hidden="true">🥳🎊</div>
+      <h2>Milestone reached!</h2>
+      <div class="badge">A$1,000,000+</div>
+      <p>Massive congrats to every educator, parent and supporter.</p>
+    </div>
+  </div>
 
-function escapeHtml(s: string) {
-  return s.replace(/[&<>"']/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c as any])
-  );
-}
-function json(obj: any, status = 200) {
-  return new Response(JSON.stringify(obj), { status, headers: { "content-type": "application/json" } });
-}
-function text(s: string, status = 200) {
-  return new Response(s, { status, headers: { "content-type": "text/plain" } });
-}
-function htmlResponse(s: string) {
-  return new Response(s, { headers: { "content-type": "text/html; charset=utf-8" } });
-}
-function isAuthorised(url: URL, env: Env) {
-  const token = url.searchParams.get("token") || "";
-  return !!(env.ADMIN_TOKEN && token && token === env.ADMIN_TOKEN);
-}
+  <script>
+    /* ======== CONFIG: change this value each morning ======== */
+    const TOTAL_AUD = 988100; // <— Edit this number only
+    /* ======================================================== */
+
+    const TARGET = 1_000_000;
+
+    function fmtAUD(n){
+      return new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', maximumFractionDigits: 0 }).format(n);
+    }
+    function fmtPct(n){ return n.toFixed(2) + '%'; }
+
+    const numbers = document.getElementById('numbers');
+    const fill = document.getElementById('fill');
+
+    const progress = Math.max(0, Math.min(1, TOTAL_AUD / TARGET));
+    const remaining = Math.max(0, TARGET - TOTAL_AUD);
+
+    // Update text block
+    numbers.innerHTML = [
+      `Total so far: <b>${fmtAUD(TOTAL_AUD)}</b>`,
+      `Remaining to $1M: <b>${fmtAUD(remaining)}</b>`,
+      `Progress: <b>${fmtPct(progress * 100)}</b>`
+    ].join('<br/>');
+
+    // Update progress bar
+    fill.style.width = (progress * 100) + '%';
+    fill.setAttribute('aria-valuenow', (progress * 100).toFixed(2));
+
+    // Fire celebration if at/over target
+    if (TOTAL_AUD >= TARGET) celebrate();
+
+    // ——— Confetti celebration (no libraries) ———
+    function celebrate(){
+      const overlay = document.getElementById('celebrate');
+      const canvas = document.getElementById('confetti');
+      overlay.style.display = 'grid';
+      canvas.style.display = 'block';
+
+      const ctx = canvas.getContext('2d');
+      const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+      let W, H, running = true;
+      let pieces = [];
+      const colours = ['#ffffff','#b0fff0','#8ef0d8','#5ee0d0','#1ad1a4','#19b9c8','#0aa2cf','#68f9d2'];
+
+      function resize(){
+        W = canvas.width = Math.floor(window.innerWidth * DPR);
+        H = canvas.height = Math.floor((window.innerHeight) * DPR);
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+      }
+      window.addEventListener('resize', resize, { passive:true });
+      resize();
+
+      function spawn(n){
+        for (let i=0; i<n; i++){
+          const w = 6 + Math.random()*10;
+          const h = 8 + Math.random()*14;
+          pieces.push({
+            x: Math.random()*W,
+            y: -20,
+            w, h,
+            a: Math.random()*Math.PI*2,
+            v: { x: (Math.random() - .5) * 1.2, y: 1.5 + Math.random()*2.5 },
+            rot: (Math.random() - .5) * .2,
+            col: colours[(Math.random()*colours.length)|0]
+          });
+        }
+      }
+
+      function step(){
+        if (!running) return;
+        ctx.clearRect(0,0,W,H);
+        // spawn stream
+        spawn(6);
+        for (const p of pieces){
+          p.v.y += 0.02;       // gravity
+          p.x += p.v.x * DPR;
+          p.y += p.v.y * DPR;
+          p.a += p.rot;
+        }
+        // draw
+        for (const p of pieces){
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.a);
+          ctx.fillStyle = p.col;
+          ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
+          ctx.restore();
+        }
+        // recycle off-screen
+        pieces = pieces.filter(p => p.y < H + 40);
+        requestAnimationFrame(step);
+      }
+      step();
+
+      // auto stop after 10s to save battery
+      setTimeout(() => { running = false; }, 10000);
+    }
+
+    // Optional: expose a simple helper in console to test celebration without editing totals
+    // window.testCelebrate = celebrate;
+  </script>
+</body>
+</html>
+"""
+with open("/mnt/data/samii_milestone_static.html", "w", encoding="utf-8") as f:
+    f.write(html_content)
+
+"/mnt/data/samii_milestone_static.html"

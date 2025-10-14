@@ -125,7 +125,7 @@ export default {
   </div>
 
   <script>
-    const TOTAL_AUD = 1_000_030; // update manually each morning
+    const TOTAL_AUD = 999_300; // update manually each morning
     const TARGET = 1_000_000;
 
     function fmtAUD(n){

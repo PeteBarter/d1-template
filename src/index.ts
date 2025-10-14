@@ -39,7 +39,7 @@ export default {
       text-align:center;
     }
     .logo img {
-      width: clamp(180px, 35vw, 300px);
+      width: clamp(360px, 70vw, 600px);
       margin-bottom: 10px;
     }
     .sub{

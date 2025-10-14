@@ -186,7 +186,7 @@ html_content = r"""<!DOCTYPE html>
 
   <script>
     /* ======== CONFIG: change this value each morning ======== */
-    const TOTAL_AUD = 988100; // <— Edit this number only
+    const TOTAL_AUD = 988000; // <— Edit this number only
     /* ======================================================== */
 
     const TARGET = 1_000_000;

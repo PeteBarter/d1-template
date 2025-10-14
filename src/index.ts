@@ -1,10 +1,9 @@
-# Create a standalone HTML file for the SAMii Milestone Tracker (static / manual update)
-html_content = r"""<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SAMii • Payments Milestone Tracker (Static)</title>
+  <title>SAMii • Lesson Payments Milestone Tracker (Static)</title>
   <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
     :root{
@@ -36,36 +35,9 @@ html_content = r"""<!DOCTYPE html>
       width:min(1000px, calc(100% - 24px));
       text-align:center;
     }
-    .logo{
-      font-weight:700;
-      letter-spacing:.08em;
-      font-size: clamp(36px, 5vw, 68px);
-      line-height:1;
-      margin: 6px 0 10px;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      gap:14px;
-      filter: drop-shadow(0 4px 20px rgba(0,0,0,.2));
-    }
-    .logo .bot{
-      width: clamp(44px, 7vw, 72px);
-      height: clamp(44px, 7vw, 72px);
-      border-radius:20px;
-      background:
-        radial-gradient(circle at 32% 38%, #a9f1ff 0 3px, transparent 4px),
-        radial-gradient(circle at 68% 38%, #a9f1ff 0 3px, transparent 4px),
-        radial-gradient(circle at 50% 65%, #a9f1ff 0 6px, transparent 8px),
-        linear-gradient(180deg, #c6f6ff 0%, #9fd5ff 50%, #6dbce8 100%);
-      box-shadow: inset 0 -4px 8px rgba(0,0,0,.25), 0 8px 24px rgba(0,0,0,.25);
-      position:relative;
-    }
-    .logo .txt{
-      letter-spacing:.22em;
-      background: linear-gradient(180deg, #d8f7ff 0%, #cbefff 40%, #a9dff7 80%);
-      -webkit-background-clip:text;
-      background-clip:text;
-      color:transparent;
+    .logo img {
+      width: clamp(180px, 35vw, 300px);
+      margin-bottom: 10px;
     }
     .sub{
       margin: 4px 0 26px;
@@ -143,7 +115,6 @@ html_content = r"""<!DOCTYPE html>
       from{ transform: translateY(8px) scale(.98); opacity: 0; }
       to{ transform:none; opacity: 1; }
     }
-    /* Canvas covers page for confetti */
     #confetti{
       position: fixed;
       inset: 0;
@@ -155,9 +126,8 @@ html_content = r"""<!DOCTYPE html>
 </head>
 <body>
   <div class="wrap">
-    <div class="logo" aria-label="SAMii">
-      <div class="txt">SAMii</div>
-      <div class="bot" aria-hidden="true"></div>
+    <div class="logo">
+      <img src="https://cdn.prod.website-files.com/6642ff26ca1cac64614e0e96/6642ff6de91fa06b733c39c6_SAMii-p-500.png" alt="SAMii logo" />
     </div>
 
     <div class="sub">🎉 <span>Lesson Payments Milestone Tracker</span> 🎉</div>
@@ -166,14 +136,11 @@ html_content = r"""<!DOCTYPE html>
       <div class="fill" id="fill" role="progressbar" aria-valuemin="0" aria-valuemax="100"></div>
     </div>
 
-    <div class="numbers" id="numbers">
-      <!-- Populated by JS -->
-    </div>
+    <div class="numbers" id="numbers"></div>
 
     <div class="footer">Updated manually • SAMii.com.au</div>
   </div>
 
-  <!-- Celebration UI -->
   <canvas id="confetti"></canvas>
   <div class="celebrate" id="celebrate">
     <div class="card">
@@ -185,10 +152,7 @@ html_content = r"""<!DOCTYPE html>
   </div>
 
   <script>
-    /* ======== CONFIG: change this value each morning ======== */
-    const TOTAL_AUD = 99999; // <— Edit this number only
-    /* ======================================================== */
-
+    const TOTAL_AUD = 988100; // <— update manually each morning
     const TARGET = 1_000_000;
 
     function fmtAUD(n){
@@ -202,27 +166,22 @@ html_content = r"""<!DOCTYPE html>
     const progress = Math.max(0, Math.min(1, TOTAL_AUD / TARGET));
     const remaining = Math.max(0, TARGET - TOTAL_AUD);
 
-    // Update text block
     numbers.innerHTML = [
       `Total so far: <b>${fmtAUD(TOTAL_AUD)}</b>`,
       `Remaining to $1M: <b>${fmtAUD(remaining)}</b>`,
       `Progress: <b>${fmtPct(progress * 100)}</b>`
     ].join('<br/>');
 
-    // Update progress bar
     fill.style.width = (progress * 100) + '%';
     fill.setAttribute('aria-valuenow', (progress * 100).toFixed(2));
 
-    // Fire celebration if at/over target
     if (TOTAL_AUD >= TARGET) celebrate();
 
-    // ——— Confetti celebration (no libraries) ———
     function celebrate(){
       const overlay = document.getElementById('celebrate');
       const canvas = document.getElementById('confetti');
       overlay.style.display = 'grid';
       canvas.style.display = 'block';
-
       const ctx = canvas.getContext('2d');
       const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
       let W, H, running = true;
@@ -257,15 +216,13 @@ html_content = r"""<!DOCTYPE html>
       function step(){
         if (!running) return;
         ctx.clearRect(0,0,W,H);
-        // spawn stream
         spawn(6);
         for (const p of pieces){
-          p.v.y += 0.02;       // gravity
+          p.v.y += 0.02;
           p.x += p.v.x * DPR;
           p.y += p.v.y * DPR;
           p.a += p.rot;
         }
-        // draw
         for (const p of pieces){
           ctx.save();
           ctx.translate(p.x, p.y);
@@ -274,23 +231,12 @@ html_content = r"""<!DOCTYPE html>
           ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
           ctx.restore();
         }
-        // recycle off-screen
         pieces = pieces.filter(p => p.y < H + 40);
         requestAnimationFrame(step);
       }
       step();
-
-      // auto stop after 10s to save battery
       setTimeout(() => { running = false; }, 10000);
     }
-
-    // Optional: expose a simple helper in console to test celebration without editing totals
-    // window.testCelebrate = celebrate;
   </script>
 </body>
 </html>
-"""
-with open("/mnt/data/samii_milestone_static.html", "w", encoding="utf-8") as f:
-    f.write(html_content)
-
-"/mnt/data/samii_milestone_static.html"
